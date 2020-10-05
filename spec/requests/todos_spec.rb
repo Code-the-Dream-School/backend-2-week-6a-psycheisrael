@@ -1,28 +1,43 @@
 require 'rails_helper'
 
-RSpec.describe 'Items API' do
-  # Initialize the test data
-  let!(:todo) { create(:todo) }
-  let!(:items) { create_list(:item, 20, todo_id: todo.id) }
-  let(:todo_id) { todo.id }
-  let(:id) { items.first.id }
+RSpec.describe 'Todos API', type: :request do
+  # initialize test data
+  let!(:todos) { create_list(:todo, 10) }
+  let(:todo_id) { todos.first.id }
 
-  # Test suite for GET /todos/:todo_id/items
-  describe 'GET /todos/:todo_id/items' do
-    before { get "/todos/#{todo_id}/items" }
+  # Test suite for GET /todos
+  describe 'GET /todos' do
+    # make HTTP get request before each example
+    before { get '/todos' }
 
-    context 'when todo exists' do
+    it 'returns todos' do
+      # Note `json` is a custom helper to parse JSON responses
+      expect(json).not_to be_empty
+      expect(json.size).to eq(10)
+    end
+
+    it 'returns status code 200' do
+      expect(response).to have_http_status(200)
+    end
+  end
+
+  # Test suite for GET /todos/:id
+  describe 'GET /todos/:id' do
+    before { get "/todos/#{todo_id}" }
+
+    context 'when the record exists' do
+      it 'returns the todo' do
+        expect(json).not_to be_empty
+        expect(json['id']).to eq(todo_id)
+      end
+
       it 'returns status code 200' do
         expect(response).to have_http_status(200)
       end
-
-      it 'returns all todo items' do
-        expect(json.size).to eq(20)
-      end
     end
 
-    context 'when todo does not exist' do
-      let(:todo_id) { 0 }
+    context 'when the record does not exist' do
+      let(:todo_id) { 100 }
 
       it 'returns status code 404' do
         expect(response).to have_http_status(404)
@@ -34,94 +49,129 @@ RSpec.describe 'Items API' do
     end
   end
 
-  # Test suite for GET /todos/:todo_id/items/:id
-  describe 'GET /todos/:todo_id/items/:id' do
-    before { get "/todos/#{todo_id}/items/#{id}" }
+  # Test suite for POST /todos
+  describe 'POST /todos' do
+    # valid payload
+    let(:valid_attributes) { { title: 'Learn Elm', created_by: '1' } }
 
-    context 'when todo item exists' do
-      it 'returns status code 200' do
-        expect(response).to have_http_status(200)
+    context 'when the request is valid' do
+      before { post '/todos', params: valid_attributes }
+
+      it 'creates a todo' do
+        expect(json['title']).to eq('Learn Elm')
       end
-
-      it 'returns the item' do
-        expect(json['id']).to eq(id)
-      end
-    end
-
-    context 'when todo item does not exist' do
-      let(:id) { 0 }
-
-      it 'returns status code 404' do
-        expect(response).to have_http_status(404)
-      end
-
-      it 'returns a not found message' do
-        expect(response.body).to match(/Couldn't find Item/)
-      end
-    end
-  end
-
-  # Test suite for PUT /todos/:todo_id/items
-  describe 'POST /todos/:todo_id/items' do
-    let(:valid_attributes) { { name: 'Visit Narnia', done: false } }
-
-    context 'when request attributes are valid' do
-      before { post "/todos/#{todo_id}/items", params: valid_attributes }
 
       it 'returns status code 201' do
         expect(response).to have_http_status(201)
       end
     end
 
-    context 'when an invalid request' do
-      before { post "/todos/#{todo_id}/items", params: {} }
+    context 'when the request is invalid' do
+      before { post '/todos', params: { title: 'Foobar' } }
 
       it 'returns status code 422' do
         expect(response).to have_http_status(422)
       end
 
-      it 'returns a failure message' do
-        expect(response.body).to match(/Validation failed: Name can't be blank/)
+      it 'returns a validation failure message' do
+        expect(response.body)
+          .to match(/Validation failed: Created by can't be blank/)
       end
     end
   end
 
-  # Test suite for PUT /todos/:todo_id/items/:id
-  describe 'PUT /todos/:todo_id/items/:id' do
-    let(:valid_attributes) { { name: 'Mozart' } }
+  # Test suite for PUT /todos/:id
+  describe 'PUT /todos/:id' do
+    let(:valid_attributes) { { title: 'Shopping' } }
 
-    before { put "/todos/#{todo_id}/items/#{id}", params: valid_attributes }
+    context 'when the record exists' do
+      before { put "/todos/#{todo_id}", params: valid_attributes }
 
-    context 'when item exists' do
+      it 'updates the record' do
+        expect(response.body).to be_empty
+      end
+
       it 'returns status code 204' do
         expect(response).to have_http_status(204)
-      end
-
-      it 'updates the item' do
-        updated_item = Item.find(id)
-        expect(updated_item.name).to match(/Mozart/)
-      end
-    end
-
-    context 'when the item does not exist' do
-      let(:id) { 0 }
-
-      it 'returns status code 404' do
-        expect(response).to have_http_status(404)
-      end
-
-      it 'returns a not found message' do
-        expect(response.body).to match(/Couldn't find Item/)
       end
     end
   end
 
   # Test suite for DELETE /todos/:id
   describe 'DELETE /todos/:id' do
-    before { delete "/todos/#{todo_id}/items/#{id}" }
+    before { delete "/todos/#{todo_id}" }
 
     it 'returns status code 204' do
       expect(response).to have_http_status(204)
+    end
+  end
+  path '/todos' do
+
+    get('list todos') do
+      tags 'Todos'
+      response(200, 'successful') do
+
+        after do |example|
+          example.metadata[:response][:examples] = { 'application/json' => JSON.parse(response.body, symbolize_names: true) }
+        end
+        run_test!
+      end
+    end
+
+    post('create todo') do
+      tags 'Todos'
+      consumes 'application/json'
+      produces 'application/json'
+      parameter name: :todo, in: :body, required: true, schema: {
+        type: :object,
+        required: %i[title created_by],
+        properties: {
+          title: { type: :string },
+          created_by: { type: :string }
+        }
+      }
+      response(201, 'successful') do
+        let(:todo) { { title: 'Learn Elm', created_by: '1' } }
+        run_test!
+      end
+    end
+  end
+
+  path '/todos/{id}' do
+    parameter name: 'id', in: :path, type: :integer, description: 'id'
+
+    get('show todo') do
+      tags 'Todos'
+      response(200, 'successful') do
+        let(:id) { 5 }
+        # after do |example|
+        #   example.metadata[:response][:examples] = { 'application/json' => JSON.parse(response.body, symbolize_names: true) }
+        # end
+        run_test!
+      end
+    end
+
+    put('update todo') do
+      tags 'Todos'
+      parameter name: :todo, in: :body, schema: {
+        type: :object,
+        properties: {
+          title: { type: :string },
+          content: { type: :string }
+        }
+      }
+      response(204, "successful") do
+        let(:id) { 5 }
+        run_test!
+      end
+    end
+
+    delete('delete todo') do
+      tags 'Todos'
+      response(204, "successful") do
+        let(:id) { 5 }
+        run_test!
+      end
     end
   end
 end
