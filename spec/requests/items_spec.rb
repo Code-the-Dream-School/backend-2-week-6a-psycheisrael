@@ -1,5 +1,5 @@
 require 'rails_helper'
-
+require 'swagger_helper'
 RSpec.describe 'Items API' do
   # Initialize the test data
   let!(:todo) { create(:todo) }

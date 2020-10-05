@@ -1,5 +1,5 @@
 require 'rails_helper'
-
+require 'swagger_helper'
 RSpec.describe 'Todos API', type: :request do
   # initialize test data
   let!(:todos) { create_list(:todo, 10) }
